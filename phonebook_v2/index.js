@@ -1,14 +1,11 @@
 const express = require("express");
-// const morgan = require("morgan");
+require("dotenv").config();
 const cors = require("cors");
+const Person = require("./models/person");
 const app = express();
 app.use(cors());
 app.use(express.static("dist"));
 app.use(express.json());
-// morgan.token("body", (req) => JSON.stringify(req.body));
-// app.use(
-//   morgan(":method :url :status :res[content-length] - :response-time ms :body")
-// );
 
 let persons = [
   {
@@ -36,67 +33,99 @@ let persons = [
 // Catch the favicon.ico request and send a 204 No Content status:
 app.get("/favicon.ico", (req, res) => res.status(204));
 
-app.get("/", (request, response) => {
-  response.send("<h1>Hello World!</h1>");
-});
-
 app.get("/api/persons", (request, response) => {
-  response.json(persons);
+  Person.find({}).then((persons) => {
+    response.json(persons);
+    console.log("persons requested");
+  });
 });
 
 app.get("/api/persons/:id", (request, response) => {
   const id = request.params.id;
-  const person = persons.find((person) => person.id === id);
-
-  if (person) {
-    response.json(person);
-    console.log(`persons with id ${id} requested`);
-  } else {
-    response.status(404).send("<h1>NOT FOUND</h1>");
-  }
+  Person.findById(id)
+    .then((person) => {
+      response.json(person);
+    })
+    .catch((error) => {
+      console.log(error);
+      response.status(404).end();
+    });
 });
 
 app.get("/info", (request, response) => {
-  response.send(
-    `<h1>Phonebook has info for ${
-      persons.length
-    } people</h1><h3>${new Date()}</h3>`
-  );
+  Person.countDocuments({}).then((count) => {
+    response.send(
+      `<h1>Phonebook has info for ${count} people</h1><h3>${new Date()}</h3>`
+    );
+  });
+
   console.log("info route requested");
 });
 
 app.delete("/api/persons/:id", (request, response) => {
   const id = request.params.id;
-  persons = persons.filter((person) => person.id !== id);
-
-  response.status(204).end();
+  Person.findByIdAndDelete(id)
+    .then((result) => {
+      response.status(204).end();
+    })
+    .catch((error) => {
+      console.log(error);
+      response.status(404).end();
+    });
 });
 
 app.post("/api/persons", (request, response) => {
-  const person = request.body;
-  const duplicate = persons.find((p) => p.name === person.name);
-
-  if (!person.name || !person.number) {
-    return response.status(400).json({
-      error: "name or number is missing",
-    });
-  } else if (duplicate) {
-    return response.status(400).json({
-      error: "name already exists in phonebook",
-    });
+  const body = request.body;
+  if (body === undefined) {
+    return response.status(400).json({ error: "content missing" });
   }
 
-  const id = Math.floor(Math.random() * 1000000) + 1;
+  Person.findOne({ name: body.name }).then((result) => {
+    if (result) {
+      return response.status(409).json({ error: "person already exists" });
+    }
+  });
 
-  const newPerson = {
-    id: id.toString(),
-    name: person.name,
-    number: person.number,
+  const person = new Person({
+    name: body.name,
+    number: body.number,
+  });
+
+  person
+    .save()
+    .then((savedPerson) => {
+      response.json(savedPerson);
+    })
+    .catch((error) => {
+      console.log(error);
+      response.status(400).json({ error: error.message });
+    });
+});
+
+app.put("/api/persons/:id", (request, response) => {
+  const body = request.body;
+
+  if (!body.number) {
+    return response.status(400).json({ error: "number missing" });
+  }
+
+  const updatedPerson = {
+    number: body.number,
   };
 
-  persons = [...persons, newPerson];
-
-  response.status(201).json(newPerson);
+  // Update person by id
+  Person.findByIdAndUpdate(request.params.id, updatedPerson, { new: true })
+    .then((updatedPerson) => {
+      if (updatedPerson) {
+        response.json(updatedPerson);
+      } else {
+        response.status(404).json({ error: "person not found" });
+      }
+    })
+    .catch((error) => {
+      console.log(error);
+      response.status(400).json({ error: error.message });
+    });
 });
 
 const PORT = process.env.PORT || 3001;
