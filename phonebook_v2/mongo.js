@@ -32,7 +32,7 @@ if (process.argv.length === 3) {
     number: num,
   });
 
-  number.save().then((result) => {
+  number.save().then(() => {
     console.log(`Added ${name} number ${num} to phonebook!`);
     mongoose.connection.close();
   });
